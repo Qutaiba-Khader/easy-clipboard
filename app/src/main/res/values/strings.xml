@@ -26,6 +26,9 @@
     <string name="monitor_channel">Clipboard monitor</string>
     <string name="monitor_running">Watching the clipboard</string>
 
+    <!-- Overlay panel -->
+    <string name="overlay_permission_needed">Enable \"Display over other apps\" to pop up the clipboard panel</string>
+
     <!-- Settings titles / summaries -->
     <string name="category_sizes">Sizes</string>
     <string name="category_advanced">Advanced</string>
@@ -72,9 +75,9 @@
     <string name="setup_ime_title">Clipboard keyboard</string>
     <string name="setup_ime_sub">Enable and switch to the Easy Clipboard tray keyboard.</string>
     <string name="setup_acc_title">Accessibility service</string>
-    <string name="setup_acc_sub">Allows pasting into the focused field in other apps.</string>
+    <string name="setup_acc_sub">Double-tap a text field in any app to pop up the clipboard and paste into it.</string>
     <string name="setup_overlay_title">Display over other apps</string>
-    <string name="setup_overlay_sub">Needed to show the clip popup over other apps.</string>
+    <string name="setup_overlay_sub">Lets the clipboard panel appear over other apps on double-tap.</string>
     <string name="setup_monitor_title">Clipboard monitor service</string>
     <string name="setup_monitor_sub">Captures copied text while running.</string>
     <string name="setup_shizuku_title">Shizuku global capture</string>
