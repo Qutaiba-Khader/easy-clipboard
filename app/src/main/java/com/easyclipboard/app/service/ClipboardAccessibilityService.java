@@ -18,9 +18,11 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.ImageButton;
 import android.widget.Toast;
 
@@ -44,7 +46,10 @@ import java.util.List;
  * an editable node, if the gap since the previous editable click is < 300ms it is
  * treated as a double-tap and the panel is shown. The panel is a
  * TYPE_APPLICATION_OVERLAY window (uses the "Display over other apps" permission)
- * that does NOT steal focus from the field, so ACTION_PASTE lands in it.
+ * that does NOT steal focus from the field, so ACTION_PASTE lands in it. The
+ * window is laid out within the content area (no FLAG_LAYOUT_IN_SCREEN) and pads
+ * itself up by the navigation-bar inset, so the system back/home/recent buttons
+ * stay visible and tappable.
  */
 public class ClipboardAccessibilityService extends AccessibilityService
         implements ClipAdapter.OnItemListener {
@@ -58,7 +63,9 @@ public class ClipboardAccessibilityService extends AccessibilityService
     private CharSequence prevSourcePkg;
 
     private WindowManager windowManager;
-    private View panelView;
+    private View panelView;          // cached, re-used across shows
+    private ClipAdapter panelAdapter; // cached, data rebound on show
+    private GridLayoutManager panelLayout;
     private boolean panelShowing = false;
     private ClipRepository repo;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -125,13 +132,63 @@ public class ClipboardAccessibilityService extends AccessibilityService
     @Override
     public boolean onUnbind(android.content.Intent intent) {
         dismissPanel();
+        panelView = null;
+        panelAdapter = null;
+        panelLayout = null;
         instance = null;
         return super.onUnbind(intent);
     }
 
     // ---- the bottom panel ------------------------------------------------
 
+    /** Inflate + wire the panel once; subsequent shows reuse this view/adapter. */
     @SuppressLint("ClickableViewAccessibility")
+    private void ensurePanel() {
+        if (panelView != null) {
+            return;
+        }
+        Context themed = new ContextThemeWrapper(this, R.style.Theme_EasyClipboard);
+        LayoutInflater inflater = LayoutInflater.from(themed);
+        panelView = inflater.inflate(R.layout.overlay_clip_panel, null);
+
+        RecyclerView rv = panelView.findViewById(R.id.panel_recycler);
+        rv.setHasFixedSize(true);
+        panelLayout = new GridLayoutManager(themed, spanCount());
+        rv.setLayoutManager(panelLayout);
+        panelAdapter = new ClipAdapter(themed, repo.getClips(), this);
+        rv.setAdapter(panelAdapter);
+
+        ImageButton close = panelView.findViewById(R.id.panel_close);
+        close.setOnClickListener(v -> dismissPanel());
+
+        // Dismiss on a touch outside the panel.
+        panelView.setOnTouchListener((v, e) -> {
+            if (e.getAction() == MotionEvent.ACTION_OUTSIDE) {
+                dismissPanel();
+                return true;
+            }
+            return false;
+        });
+
+        // Pad up by the navigation-bar inset so the panel never covers the nav bar.
+        panelView.setOnApplyWindowInsetsListener((v, insets) -> {
+            int bottom = navInset(insets);
+            v.setPadding(v.getPaddingLeft(), v.getPaddingTop(), v.getPaddingRight(), bottom);
+            return insets;
+        });
+    }
+
+    @SuppressWarnings("deprecation")
+    private int navInset(WindowInsets insets) {
+        if (insets == null) {
+            return 0;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            return insets.getInsets(WindowInsets.Type.navigationBars()).bottom;
+        }
+        return insets.getSystemWindowInsetBottom();
+    }
+
     private void showClipboardPanel() {
         if (panelShowing) {
             return;
@@ -144,36 +201,23 @@ public class ClipboardAccessibilityService extends AccessibilityService
             windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
         }
         try {
-            Context themed = new ContextThemeWrapper(this, R.style.Theme_EasyClipboard);
-            LayoutInflater inflater = LayoutInflater.from(themed);
-            panelView = inflater.inflate(R.layout.overlay_clip_panel, null);
+            ensurePanel();
 
-            RecyclerView rv = panelView.findViewById(R.id.panel_recycler);
-            rv.setLayoutManager(new GridLayoutManager(themed, spanCount()));
-            rv.setAdapter(new ClipAdapter(themed, repo.getClips(), this));
-
-            ImageButton close = panelView.findViewById(R.id.panel_close);
-            close.setOnClickListener(v -> dismissPanel());
-
-            // Dismiss on a touch outside the panel.
-            panelView.setOnTouchListener((v, e) -> {
-                if (e.getAction() == MotionEvent.ACTION_OUTSIDE) {
-                    dismissPanel();
-                    return true;
-                }
-                return false;
-            });
+            // Rebind current clips + span BEFORE adding the view (avoids first-frame jank).
+            panelLayout.setSpanCount(spanCount());
+            panelAdapter.mClips = repo.getClips();
+            panelAdapter.notifyDataSetChanged();
 
             final int height = panelHeightPx();
             int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
                     ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                     : WindowManager.LayoutParams.TYPE_PHONE;
+            // NOTE: no FLAG_LAYOUT_IN_SCREEN / NO_LIMITS -> window stays above the nav bar.
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                     WindowManager.LayoutParams.MATCH_PARENT,
                     height,
                     type,
                     WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                             | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                     PixelFormat.TRANSLUCENT);
             lp.gravity = Gravity.BOTTOM;
@@ -181,14 +225,17 @@ public class ClipboardAccessibilityService extends AccessibilityService
             windowManager.addView(panelView, lp);
             panelShowing = true;
 
-            // Slide up from the bottom.
+            // Snappy slide-up.
             panelView.setTranslationY(height);
-            panelView.animate().translationY(0f).setDuration(180).start();
+            panelView.animate()
+                    .translationY(0f)
+                    .setDuration(130)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
         } catch (Throwable t) {
             t.printStackTrace();
             panelShowing = false;
             safeRemove(panelView);
-            panelView = null;
         }
     }
 
@@ -198,15 +245,19 @@ public class ClipboardAccessibilityService extends AccessibilityService
         }
         final View v = panelView;
         panelShowing = false;
-        panelView = null;
         try {
-            v.animate().translationY(v.getHeight()).setDuration(150)
-                    .withEndAction(() -> safeRemove(v)).start();
+            v.animate()
+                    .translationY(v.getHeight())
+                    .setDuration(120)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .withEndAction(() -> safeRemove(v))
+                    .start();
         } catch (Throwable t) {
             safeRemove(v);
         }
     }
 
+    /** Remove from the WindowManager but keep the cached view for reuse. */
     private void safeRemove(View v) {
         if (v == null) {
             return;
