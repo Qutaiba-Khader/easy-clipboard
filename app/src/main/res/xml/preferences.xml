@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/category_sizes">
+
+        <SeekBarPreference
+            android:defaultValue="25"
+            android:key="history"
+            android:max="200"
+            android:title="@string/history_title"
+            app:min="1"
+            app:showSeekBarValue="true"
+            app:summary="@string/history_summary" />
+
+        <SeekBarPreference
+            android:defaultValue="20"
+            android:key="txtsize"
+            android:max="40"
+            android:title="@string/txtsize_title"
+            app:min="8"
+            app:showSeekBarValue="true" />
+
+        <SeekBarPreference
+            android:defaultValue="0"
+            android:key="columncount"
+            android:max="6"
+            android:title="@string/columncount_title"
+            app:min="0"
+            app:showSeekBarValue="true"
+            app:summary="@string/columncount_summary" />
+
+        <ListPreference
+            android:defaultValue="newfirst"
+            android:entries="@array/sortby"
+            android:entryValues="@array/sortvalues"
+            android:key="sort"
+            android:title="@string/sort"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/category_advanced">
+
+        <Preference
+            android:key="blacklist"
+            android:title="@string/blacklist"
+            app:summary="@string/blacklist_summary" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="pastefunction"
+            android:title="@string/pastefunction" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="cbbutton"
+            android:title="@string/cbbutton"
+            app:summary="@string/cbbutton_summary" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="singlepaste"
+            android:title="@string/singlepaste"
+            app:summary="@string/singlepaste_summary" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="false"
+            android:key="monitorservice"
+            android:title="@string/monitorservice"
+            app:summary="@string/monitorservice_summary" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:dependency="monitorservice"
+            android:key="notification"
+            android:title="@string/notification_title"
+            app:summary="@string/notification_summary" />
+
+        <SwitchPreferenceCompat
+            android:defaultValue="true"
+            android:key="keymonitor"
+            android:title="@string/keymonitor"
+            app:summary="@string/keymonitor_summary" />
+
+    </PreferenceCategory>
+
+</PreferenceScreen>

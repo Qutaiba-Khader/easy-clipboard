@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App-owned colours ported from the original Native Clipboard res/values/colors.xml -->
+    <color name="background_white">#ffffffff</color>
+    <color name="clipboard_preference_bg">#ffeeeeee</color>
+    <color name="dark_background">#ff303030</color>
+    <color name="dark_card">#ff424242</color>
+    <color name="dark_deep_purple">#ff2f133c</color>
+    <color name="deep_purple">#ff411955</color>
+    <color name="light_deep_purple">#ff773b94</color>
+    <color name="textview_textcolor">#ff664b0e</color>
+
+    <!-- Default clip-card colours (match the ClipAdapter integer defaults) -->
+    <color name="clip_default">#ffffbb20</color>
+    <color name="clip_pinned_default">#ffcf5a40</color>
+    <color name="clip_text_default">#ff66998e</color>
+</resources>

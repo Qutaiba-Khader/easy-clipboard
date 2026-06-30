@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Easy Clipboard</string>
+    <string name="ime_label">Easy Clipboard Tray</string>
+    <string name="accessibility_label">Easy Clipboard Paste Helper</string>
+
+    <!-- Tabs -->
+    <string name="tab_clipboard">Clipboard</string>
+    <string name="tab_settings">Settings</string>
+    <string name="tab_about">About</string>
+
+    <!-- Clip actions -->
+    <string name="copied">Copied to clipboard</string>
+    <string name="clip_actions">Clip actions</string>
+    <string name="pin">Pin</string>
+    <string name="unpin">Unpin</string>
+    <string name="edit">Edit</string>
+    <string name="delete">Delete</string>
+    <string name="add_clip">Add clip</string>
+    <string name="pick_clip">Pick a clip to paste</string>
+
+    <!-- Monitor service -->
+    <string name="monitor_channel">Clipboard monitor</string>
+    <string name="monitor_running">Watching the clipboard</string>
+
+    <!-- Settings titles / summaries -->
+    <string name="category_sizes">Sizes</string>
+    <string name="category_advanced">Advanced</string>
+    <string name="blacklist">Blacklist</string>
+    <string name="blacklist_summary">Apps to ignore (coming soon)</string>
+    <string name="sort">Sort order</string>
+    <string name="history_title">History size</string>
+    <string name="history_summary">Number of clips to keep</string>
+    <string name="txtsize_title">Text size</string>
+    <string name="columncount_title">Column count</string>
+    <string name="columncount_summary">0 = automatic</string>
+    <string name="pastefunction">Paste function</string>
+    <string name="cbbutton">Clipboard button</string>
+    <string name="cbbutton_summary">Show a quick clipboard button</string>
+    <string name="singlepaste">Single paste</string>
+    <string name="singlepaste_summary">Hide after pasting one clip</string>
+    <string name="monitorservice">Background monitor</string>
+    <string name="monitorservice_summary">Capture clips with a foreground service</string>
+    <string name="notification_title">Show notification</string>
+    <string name="notification_summary">Persistent monitor notification</string>
+    <string name="keymonitor">Key monitor</string>
+    <string name="keymonitor_summary">Watch hardware copy keys</string>
+
+    <!-- Sort entries -->
+    <string name="sort_newfirst">Newest first</string>
+    <string name="sort_pinnedfirst">Pinned first</string>
+    <string name="sort_pinnedlast">Pinned last</string>
+</resources>
