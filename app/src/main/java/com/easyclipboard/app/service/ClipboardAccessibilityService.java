@@ -42,17 +42,15 @@ import java.util.List;
  * text field in ANY app pops a keyboard-style clipboard panel up from the
  * bottom; tapping a clip pastes it into that field.
  *
- * PERFORMANCE: onAccessibilityEvent only does the cheap double-tap timing check
- * (no disk / heavy work — it runs for every UI event system-wide). The panel
- * view + adapter are inflated ONCE (on service connect, off the event hot path)
- * and reused; showing the panel only rebinds the in-memory clip list + cached
- * settings and adds the cached view to the WindowManager — no disk, no
- * re-inflation. The clip list is served from {@link ClipRepository}'s in-memory
- * cache (loaded on a background thread at process start).
+ * PERFORMANCE: onAccessibilityEvent only does the cheap double-tap timing check.
+ * The panel view + adapter are inflated ONCE (on connect) and reused; showing
+ * the panel only rebinds the in-memory clip list + cached settings, then adds the
+ * cached view — no disk, no re-inflation.
  *
  * The window is laid out within the content area (no FLAG_LAYOUT_IN_SCREEN) and
  * pads itself up by the navigation-bar inset, so the system back/home/recent
- * buttons stay visible and tappable.
+ * buttons stay visible and tappable. The top handle bar and the close (X) both
+ * dismiss the panel.
  */
 public class ClipboardAccessibilityService extends AccessibilityService
         implements ClipAdapter.OnItemListener {
@@ -148,11 +146,12 @@ public class ClipboardAccessibilityService extends AccessibilityService
 
     @Override
     public void onInterrupt() {
+        dismissPanel();
     }
 
     @Override
     public boolean onUnbind(android.content.Intent intent) {
-        dismissPanel();
+        forceRemovePanel();
         if (repo != null) {
             repo.removeObserver(dataObserver);
         }
@@ -161,6 +160,16 @@ public class ClipboardAccessibilityService extends AccessibilityService
         panelLayout = null;
         instance = null;
         return super.onUnbind(intent);
+    }
+
+    @Override
+    public void onDestroy() {
+        forceRemovePanel();
+        if (repo != null) {
+            repo.removeObserver(dataObserver);
+        }
+        instance = null;
+        super.onDestroy();
     }
 
     // ---- the bottom panel ------------------------------------------------
@@ -182,8 +191,13 @@ public class ClipboardAccessibilityService extends AccessibilityService
         panelAdapter = new ClipAdapter(themed, repo.getClips(), this);
         rv.setAdapter(panelAdapter);
 
+        // Close (X) and the top handle bar both dismiss the panel.
         ImageButton close = panelView.findViewById(R.id.panel_close);
         close.setOnClickListener(v -> dismissPanel());
+        View handle = panelView.findViewById(R.id.panel_handle_button);
+        if (handle != null) {
+            handle.setOnClickListener(v -> dismissPanel());
+        }
 
         // Dismiss on a touch outside the panel.
         panelView.setOnTouchListener((v, e) -> {
@@ -226,6 +240,13 @@ public class ClipboardAccessibilityService extends AccessibilityService
         }
         try {
             ensurePanel();
+
+            // If a previous dismiss animation hasn't finished removing the view,
+            // detach it first so addView never throws "already added".
+            if (panelView.getParent() != null) {
+                panelView.animate().cancel();
+                safeRemove(panelView);
+            }
 
             // Rebind current clips + cached settings + span BEFORE adding the view
             // (no disk, no re-inflation — avoids first-frame jank).
@@ -280,6 +301,19 @@ public class ClipboardAccessibilityService extends AccessibilityService
                     .start();
         } catch (Throwable t) {
             safeRemove(v);
+        }
+    }
+
+    /** Immediately drop the panel without animation (lifecycle teardown). */
+    private void forceRemovePanel() {
+        panelShowing = false;
+        if (panelView != null) {
+            try {
+                panelView.animate().cancel();
+            } catch (Throwable ignored) {
+                // ignore
+            }
+            safeRemove(panelView);
         }
     }
 
@@ -358,10 +392,11 @@ public class ClipboardAccessibilityService extends AccessibilityService
             boolean pasted = false;
             try {
                 AccessibilityNodeInfo root = getRootInActiveWindow();
-                AccessibilityNodeInfo focus = root != null
-                        ? root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) : null;
-                if (focus != null && focus.isEditable()) {
-                    pasted = focus.performAction(AccessibilityNodeInfo.ACTION_PASTE);
+                if (root != null) {
+                    AccessibilityNodeInfo focus = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT);
+                    if (focus != null && focus.isEditable()) {
+                        pasted = focus.performAction(AccessibilityNodeInfo.ACTION_PASTE);
+                    }
                 }
             } catch (Throwable ignored) {
                 // fall through to the toast
@@ -374,7 +409,7 @@ public class ClipboardAccessibilityService extends AccessibilityService
         dismissPanel();
     }
 
-    /** Kept from the previous scaffold: paste the clipboard into the focused field. */
+    /** Kept from the earlier scaffold: paste the clipboard into the focused field. */
     public boolean pasteToFocused() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) {

@@ -1,67 +1,76 @@
 # Easy Clipboard
 
-A modern, open-source **clipboard history manager for Android** — a spiritual successor to the
-long-dead Xposed app *Native Clipboard* (`com.dhm47.nativeclipboard`, last updated ~2016,
-Android 7-only). Easy Clipboard rebuilds the same idea — *multi-clip history + paste into any
-field + a "Clipboard" button in the text-selection menu* — using **sanctioned modern APIs**, so it
-runs on **Android 8–15 with no root and no Xposed**.
+A modern, open-source **clipboard history manager for Android** — a no-root /
+no-Xposed successor to the long-dead Xposed app *Native Clipboard*
+(`com.dhm47.nativeclipboard`). Easy Clipboard rebuilds the same idea —
+*multi-clip history + paste into any field + a "Clipboard" button in the
+text-selection menu* — using **sanctioned modern APIs**, so it runs on
+**Android 8–15 with no root and no Xposed**.
 
-> Status: 📐 **Design / spec phase.** This repo currently holds the reverse-engineering analysis
-> of the original app and the architecture plan. App code lands next.
+> Status: ✅ **Working MVP.** A compiling, installable app (single Activity +
+> Fragments, Java, Material 3). See the latest [Release](../../releases) for an
+> installable APK, and [`docs/EASY_CLIPBOARD_DETAILS.md`](docs/EASY_CLIPBOARD_DETAILS.md)
+> for the full implementation write-up.
 
-## Why a rewrite (not a patch)
+## Features
 
-The original is structurally obsolete:
-- Its core relied on **Xposed hooks** into private framework classes (`android.widget.Editor.*`,
-  Chromium/Gecko internals) that no longer exist past Android 7.
-- It targets `targetSdk 25`, which modern Android won't run normally.
-- Android 10+ blocks the "globally hook every copy" model outright.
+- **Clip history grid** — the original's clip-card grid look (ported card,
+  drawables, colours, `ClipAdapter`); tap to copy, double-tap to view full text,
+  long-press to pin / edit / delete, swipe to delete, FAB to add.
+- **Double-tap any text field → bottom clipboard panel** (via Accessibility): a
+  keyboard-style panel slides up from the bottom; tap a clip to paste it into the
+  field. No floating bubble. Top handle and a close (X) dismiss it; it sits above
+  the system nav bar.
+- **Clipboard keyboard (IME)** — a clip-tray keyboard that commits a chosen clip
+  into the focused field and can read the clipboard on every Android version.
+- **Selection-menu button** (`ACTION_PROCESS_TEXT`) — a "Clipboard" entry in any
+  app's text-selection toolbar; pick a clip to paste it over the selection.
+- **Background monitor** — a foreground service that captures copies while alive.
+- **Shizuku global capture (optional, no root)** — records every copy from any app
+  in the background by talking to the clipboard service as the shell UID. Degrades
+  gracefully to the paths above when Shizuku is absent.
+- **Settings** — history size, sort (new / pinned-first / pinned-last), text size,
+  column count, plus a **Setup** tab that shows and gates each capability/permission.
 
-See [`docs/REVERSE_ENGINEERING_REPORT.md`](docs/REVERSE_ENGINEERING_REPORT.md) and
-[`docs/ORIGINAL_APP_PROFILE_AND_PLAN.md`](docs/ORIGINAL_APP_PROFILE_AND_PLAN.md) for the full
-teardown and the feature-by-feature modernization plan.
+## The one real constraint
 
-## The one real limitation (read this)
+**Android 10+ blocks background clipboard reads** for ordinary apps — only the
+focused app or the active IME may read the clipboard. This is an OS rule, so the
+app provides multiple sanctioned capture paths (IME, PROCESS_TEXT, foreground
+monitor) and an optional Shizuku path for true global background capture.
 
-**Android 10+ (API 29) blocks background clipboard reads** — only the *focused app* or the
-*active keyboard (IME)* may read the clipboard. This is enforced by the **OS, not by any app
-store**, so being off-store does not remove it. It is **not a blocker**; it just shapes the
-architecture below.
+## Build
 
-## Architecture
+```bash
+echo "sdk.dir=/path/to/android-sdk" > local.properties
+./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+./gradlew assembleRelease    # app/build/outputs/apk/release/app-release.apk (debug-keystore signed, R8 off)
+```
 
-Distributed off-store (APK / F-Droid), so no store-policy constraints on accessibility/clipboard use.
+AGP 8.7.3 · Gradle 8.14 · JDK 17 · compileSdk 35 · minSdk 26 · targetSdk 35.
 
-| Concern | Approach |
-|---------|----------|
-| **Capture / paste — baseline** | **Custom IME** (Compose keyboard with a clip-tray). An active IME may read the clipboard on every Android version. Always available, no special setup. |
-| **Selection-menu "Clipboard" button** | **`ACTION_PROCESS_TEXT`** (API 23+). One Activity registered for `android.intent.action.PROCESS_TEXT` appears in the text-selection toolbar of *every* app, with zero hooks; returning replacement text pastes a chosen clip in place. |
-| **Global "capture every copy" (background)** | **Shizuku** — runs under the ADB/shell UID, which is **exempt** from the Android 10+ background-read restriction. Gives true global capture **without root** (user installs Shizuku and starts it once via wireless/USB debugging). Optional; degrades to IME + PROCESS_TEXT when off. |
-| **Auto paste-back (optional)** | Accessibility `ACTION_PASTE`. |
-| **Storage** | Room (SQLite), optional encryption at rest. |
-| **UI** | Kotlin + Jetpack Compose, Material 3. |
-| **SDK** | minSdk 26, targetSdk 35. |
+## Install & set up
 
-**No root. No Xposed.** Shizuku is the only privileged path and it is root-free.
+1. `adb install -r app-release.apk` (or download the APK from the Release).
+2. Open the app → **Setup** tab and enable: the **Clipboard keyboard**, the
+   **Accessibility service**, and **Display over other apps**.
+3. (Optional) Install [Shizuku](https://shizuku.rikka.app/), start it, and grant
+   Easy Clipboard for global background capture.
 
-## Planned features (ported from the original)
+## Background & analysis
 
-History with configurable size · pin clips · per-clip titles · sort (new / pinned-first /
-pinned-last) · per-app blacklist · backup & restore · custom keyboard clip-tray · theming
-(colors, collections) · sizing (text/window/columns) · boot persistence.
-
-## Roadmap
-
-- [ ] **MVP** — Compose IME with history tray, pin/sort/blacklist, `PROCESS_TEXT` button, Room storage.
-- [ ] Shizuku global-capture mode (no-root) with graceful fallback.
-- [ ] Themes / collections, sizing, backup & restore, onboarding.
-- [ ] Optional accessibility auto-paste.
+- [`docs/EASY_CLIPBOARD_DETAILS.md`](docs/EASY_CLIPBOARD_DETAILS.md) — implemented
+  app: architecture, components, the four capture/paste paths, the double-tap
+  panel flow, storage, permissions, settings, build/release, limitations.
+- [`docs/REVERSE_ENGINEERING_REPORT.md`](docs/REVERSE_ENGINEERING_REPORT.md) and
+  [`docs/ORIGINAL_APP_PROFILE_AND_PLAN.md`](docs/ORIGINAL_APP_PROFILE_AND_PLAN.md)
+  — the teardown of the original and the modernization plan.
 
 ## Credits
 
 Concept and original implementation: *Native Clipboard* by **dhm47**
-([github.com/DHM47/Native-Clip-Board](https://github.com/DHM47/Native-Clip-Board)). Easy Clipboard
-is an independent ground-up rewrite inspired by it.
+([github.com/DHM47/Native-Clip-Board](https://github.com/DHM47/Native-Clip-Board)).
+Easy Clipboard is an independent ground-up rewrite inspired by it.
 
 ## License
 

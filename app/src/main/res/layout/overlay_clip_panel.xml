@@ -10,6 +10,18 @@
         android:layout_width="match_parent"
         android:layout_height="44dp">
 
+        <!-- Large, centered, tappable handle region (dismisses the panel). -->
+        <View
+            android:id="@+id/panel_handle_button"
+            android:layout_width="140dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="center_horizontal"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:clickable="true"
+            android:contentDescription="@string/close"
+            android:focusable="true" />
+
+        <!-- The visible drag bar (non-interactive; the region above handles taps). -->
         <View
             android:layout_width="40dp"
             android:layout_height="5dp"

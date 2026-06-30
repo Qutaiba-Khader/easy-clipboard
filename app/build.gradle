@@ -18,9 +18,24 @@ android {
         aidl true
     }
 
+    signingConfigs {
+        // Sign the release build with the standard Android debug keystore so the
+        // release APK is installable without a custom key. R8/minify stays OFF so
+        // the Shizuku/AIDL reflection (android.content.IClipboard, IClipboard$Stub,
+        // IOnPrimaryClipChangedListener) is never stripped or renamed.
+        release {
+            storeFile file(System.getProperty('user.home') + '/.android/debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
@@ -28,6 +43,14 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        // Don't fail the release build on lint; the only finding is a false-positive
+        // InvalidSetHasFixedSize (the dialog's wrap_content RecyclerView shares the
+        // id "recycler" with the grid's fixed-size one). No R8 involved.
+        checkReleaseBuilds false
+        abortOnError false
     }
 }
 

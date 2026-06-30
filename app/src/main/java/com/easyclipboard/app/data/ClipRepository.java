@@ -35,6 +35,12 @@ import java.util.concurrent.Executors;
  * thread. Observers are notified on the main thread so a visible grid/panel
  * refreshes when a clip is captured in the background.
  *
+ * THREAD-SAFETY: the in-memory list is mutated only under {@code synchronized(this)}
+ * (all public mutators are synchronized, and the background loader uses the same
+ * monitor). All UI mutations happen on the main thread; background captures post
+ * to the main thread before mutating, so iteration on the main thread is safe.
+ * The disk executor only touches a defensive copy (snapshot) — never the live list.
+ *
  * The {@link #addClip} logic is ported faithfully from the original
  * Native Clipboard {@code Util.addClip}.
  */
@@ -216,13 +222,15 @@ public class ClipRepository {
         final Context app = ctx.getApplicationContext();
         io.execute(() -> {
             List<Clip> read = readFromDisk(app);
-            if (read != null) {
-                synchronized (ClipRepository.this) {
-                    clips.clear();
+            synchronized (ClipRepository.this) {
+                // Only apply the on-disk history if nothing was added in the
+                // (rare) window before the async load finished — never clobber a
+                // clip the user already captured at startup.
+                if (read != null && clips.isEmpty()) {
                     clips.addAll(read);
                 }
+                loaded = true;
             }
-            loaded = true;
             notifyObservers();
         });
     }

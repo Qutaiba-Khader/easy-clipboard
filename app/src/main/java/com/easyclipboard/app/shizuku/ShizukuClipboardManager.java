@@ -31,6 +31,9 @@ import rikka.shizuku.SystemServiceHelper;
  * Method signatures of IClipboard differ across Android 8..15 (extra String
  * attributionTag, int userId, int deviceId params were added over time), so
  * arguments are built reflectively from each Method's parameter types.
+ *
+ * The static {@code appContext} held here is always an application context
+ * (never an Activity), so it does not leak a UI lifecycle.
  */
 public final class ShizukuClipboardManager {
 
@@ -98,7 +101,7 @@ public final class ShizukuClipboardManager {
         if (capturing) {
             return true;
         }
-        if (!hasPermission()) {
+        if (ctx == null || !hasPermission()) {
             Log.w(TAG, "startGlobalCapture: no Shizuku permission");
             return false;
         }
@@ -121,8 +124,7 @@ public final class ShizukuClipboardManager {
             if (registered) {
                 capturing = true;
                 Log.i(TAG, "Global capture ON (listener mode)");
-                // Grab whatever is currently on the clipboard immediately.
-                onClipChanged();
+                onClipChanged(); // grab whatever is currently on the clipboard
                 return true;
             }
 
@@ -153,6 +155,7 @@ public final class ShizukuClipboardManager {
         capturing = false;
         changeListener = null;
         iClipboard = null;
+        lastText = null;
         Log.i(TAG, "Global capture OFF");
     }
 
@@ -194,17 +197,18 @@ public final class ShizukuClipboardManager {
                 return;
             }
             final String text = cs.toString();
-            if (text.isEmpty() || ClipRepository.SENTINEL.equals(text)) {
-                return;
-            }
-            if (text.equals(lastText)) {
+            if (text.isEmpty() || ClipRepository.SENTINEL.equals(text) || text.equals(lastText)) {
                 return;
             }
             lastText = text;
+            final Context ctx = appContext;
+            if (ctx == null) {
+                return;
+            }
             MAIN.post(new Runnable() {
                 @Override
                 public void run() {
-                    ClipRepository.get(appContext).addText(text, appContext);
+                    ClipRepository.get(ctx).addText(text, ctx);
                 }
             });
         } catch (Throwable t) {
@@ -233,8 +237,9 @@ public final class ShizukuClipboardManager {
                     return;
                 }
                 onClipChanged();
-                if (pollHandler != null) {
-                    pollHandler.postDelayed(this, POLL_INTERVAL_MS);
+                Handler h = pollHandler;
+                if (h != null) {
+                    h.postDelayed(this, POLL_INTERVAL_MS);
                 }
             }
         });
@@ -267,13 +272,12 @@ public final class ShizukuClipboardManager {
      * Build the argument array for a clipboard method from its parameter types:
      *   - IOnPrimaryClipChangedListener param -> the supplied listener (add/remove),
      *   - first String -> shell package "com.android.shell"; further String -> null,
-     *   - first int -> userId 0; further int (deviceId, API 34+) -> 0.
+     *   - int (userId, then deviceId on API 34+) -> 0.
      */
     private static Object[] buildArgs(Method m, Object listener) {
         Class<?>[] types = m.getParameterTypes();
         Object[] args = new Object[types.length];
         boolean firstString = true;
-        boolean firstInt = true;
         for (int i = 0; i < types.length; i++) {
             Class<?> t = types[i];
             if (t.getName().equals("android.content.IOnPrimaryClipChangedListener")) {
@@ -283,7 +287,6 @@ public final class ShizukuClipboardManager {
                 firstString = false;
             } else if (t == int.class || t == Integer.TYPE) {
                 args[i] = 0; // userId, then deviceId default
-                firstInt = false;
             } else {
                 args[i] = null;
             }
