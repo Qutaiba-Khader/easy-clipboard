@@ -16,11 +16,19 @@ import androidx.core.content.ContextCompat;
 
 import com.easyclipboard.app.R;
 import com.easyclipboard.app.data.ClipRepository;
+import com.easyclipboard.app.shizuku.ShizukuClipboardManager;
 
 /**
- * Foreground service that listens for primary-clip changes and feeds them into
- * {@link ClipRepository}. No-root capture path: works while the service is alive
- * (app foreground / IME up), within OS background-clipboard limits. START_STICKY.
+ * Foreground service that captures clipboard changes into {@link ClipRepository}.
+ *
+ * Two capture paths:
+ *  - the in-process {@link ClipboardManager.OnPrimaryClipChangedListener} (works
+ *    while this process is foreground / IME up), and
+ *  - if Shizuku is available + granted, the REAL global background capture (every
+ *    copy from any app) via {@link ShizukuClipboardManager#startGlobalCapture}.
+ *
+ * Keeping this as a foreground service keeps the process (and thus the Shizuku
+ * in-process listener) alive for true background capture. START_STICKY.
  */
 public class ClipboardMonitorService extends Service {
 
@@ -58,6 +66,15 @@ public class ClipboardMonitorService extends Service {
         clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboardManager != null) {
             clipboardManager.addPrimaryClipChangedListener(listener);
+        }
+        // Real global background capture, if Shizuku is running and granted.
+        try {
+            if (ShizukuClipboardManager.isShizukuAvailable()
+                    && ShizukuClipboardManager.hasPermission()) {
+                ShizukuClipboardManager.startGlobalCapture(getApplicationContext());
+            }
+        } catch (Throwable ignored) {
+            // Shizuku path is optional; never let it break the service.
         }
     }
 
@@ -105,6 +122,11 @@ public class ClipboardMonitorService extends Service {
         isRunning = false;
         if (clipboardManager != null) {
             clipboardManager.removePrimaryClipChangedListener(listener);
+        }
+        try {
+            ShizukuClipboardManager.stopGlobalCapture();
+        } catch (Throwable ignored) {
+            // no-op
         }
         super.onDestroy();
     }

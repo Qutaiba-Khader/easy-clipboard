@@ -8,6 +8,7 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
+        android:name=".EasyClipApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -66,7 +67,7 @@
                 android:resource="@xml/accessibility_config" />
         </service>
 
-        <!-- Foreground clipboard monitor (works while alive / app foreground / IME up). -->
+        <!-- Foreground clipboard monitor (keeps the process + Shizuku listener alive). -->
         <service
             android:name=".service.ClipboardMonitorService"
             android:exported="false"

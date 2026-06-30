@@ -164,23 +164,48 @@ public class SetupFragment extends Fragment {
     private void addShizukuRow() {
         boolean available = ShizukuClipboardManager.isShizukuAvailable();
         boolean granted = ShizukuClipboardManager.hasPermission();
-        Status status = !available ? Status.OPTIONAL : (granted ? Status.OK : Status.BAD);
-        String subtitle = available
-                ? getString(R.string.setup_shizuku_sub)
-                : getString(R.string.setup_shizuku_optional);
-        addRow(getString(R.string.setup_shizuku_title),
-                subtitle,
-                status,
-                available ? getString(R.string.setup_request) : getString(R.string.setup_info),
-                () -> {
-                    if (available) {
-                        ShizukuClipboardManager.requestPermission();
-                        container.postDelayed(this::rebuild, 400);
-                    } else {
-                        Toast.makeText(requireContext(),
-                                R.string.setup_shizuku_optional, Toast.LENGTH_LONG).show();
-                    }
-                });
+        boolean capturing = ShizukuClipboardManager.isCapturing();
+
+        Status status;
+        String subtitle;
+        String button;
+        Runnable action;
+
+        if (!available) {
+            status = Status.OPTIONAL;
+            subtitle = getString(R.string.setup_shizuku_optional);
+            button = getString(R.string.setup_info);
+            action = () -> Toast.makeText(requireContext(),
+                    R.string.setup_shizuku_optional, Toast.LENGTH_LONG).show();
+        } else if (!granted) {
+            status = Status.BAD;
+            subtitle = getString(R.string.setup_shizuku_sub);
+            button = getString(R.string.setup_request);
+            action = () -> {
+                ShizukuClipboardManager.requestPermission();
+                container.postDelayed(this::rebuild, 600);
+            };
+        } else if (capturing) {
+            status = Status.OK;
+            subtitle = getString(R.string.setup_shizuku_on);
+            button = getString(R.string.setup_stop);
+            action = () -> {
+                ShizukuClipboardManager.stopGlobalCapture();
+                container.postDelayed(this::rebuild, 300);
+            };
+        } else {
+            status = Status.OK;
+            subtitle = getString(R.string.setup_shizuku_ready);
+            button = getString(R.string.setup_start);
+            action = () -> {
+                // Keep the process alive (foreground service) + start global capture.
+                ClipboardMonitorService.start(requireContext());
+                ShizukuClipboardManager.startGlobalCapture(
+                        requireContext().getApplicationContext());
+                container.postDelayed(this::rebuild, 600);
+            };
+        }
+        addRow(getString(R.string.setup_shizuku_title), subtitle, status, button, action);
     }
 
     // ---- checks ----------------------------------------------------------

@@ -11,3 +11,10 @@
 
 # Shizuku is optional; do not fail if absent.
 -dontwarn rikka.shizuku.**
+-dontwarn org.lsposed.hiddenapibypass.**
+
+# Keep the AIDL listener and the Shizuku reflection surface (accessed via reflection).
+-keep class android.content.IOnPrimaryClipChangedListener { *; }
+-keep class android.content.IOnPrimaryClipChangedListener$Stub { *; }
+-keep class com.easyclipboard.app.shizuku.** { *; }
+-keep class org.lsposed.hiddenapibypass.** { *; }

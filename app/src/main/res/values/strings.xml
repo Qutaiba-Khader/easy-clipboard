@@ -77,7 +77,9 @@
     <string name="setup_overlay_sub">Needed to show the clip popup over other apps.</string>
     <string name="setup_monitor_title">Clipboard monitor service</string>
     <string name="setup_monitor_sub">Captures copied text while running.</string>
-    <string name="setup_shizuku_title">Shizuku</string>
+    <string name="setup_shizuku_title">Shizuku global capture</string>
     <string name="setup_shizuku_sub">Optional privileged backend for global background capture.</string>
     <string name="setup_shizuku_optional">Shizuku is optional. Install and start the Shizuku app to enable privileged background capture.</string>
+    <string name="setup_shizuku_ready">Shizuku granted. Start global capture to record every copy from any app in the background.</string>
+    <string name="setup_shizuku_on">Global capture: ON (Shizuku) — recording copies from any app in the background.</string>
 </resources>
