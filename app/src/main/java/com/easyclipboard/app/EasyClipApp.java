@@ -3,15 +3,20 @@ package com.easyclipboard.app;
 import android.app.Application;
 import android.os.Build;
 
+import com.easyclipboard.app.data.ClipRepository;
+
 import org.lsposed.hiddenapibypass.HiddenApiBypass;
 
 /**
- * Application entry point. On Android P+ the process is normally forbidden from
- * reflecting on hidden framework classes like {@code android.content.IClipboard}.
- * Exempting all hidden APIs here (once, at process start) is REQUIRED for the
- * Shizuku global-capture path to reflect on the clipboard service interface.
+ * Application entry point.
  *
- * This is fully guarded and never affects normal (non-Shizuku) operation.
+ * - On Android P+ the process is normally forbidden from reflecting on hidden
+ *   framework classes like {@code android.content.IClipboard}. Exempting hidden
+ *   APIs here (once, at process start) is REQUIRED for the Shizuku global-capture
+ *   path. Fully guarded; never affects normal operation.
+ * - Kicks off the one-time background load of the clip history so the in-memory
+ *   cache is warm before the user ever opens the panel (no main-thread disk I/O
+ *   on the show path).
  */
 public class EasyClipApp extends Application {
     @Override
@@ -23,6 +28,12 @@ public class EasyClipApp extends Application {
             } catch (Throwable t) {
                 t.printStackTrace();
             }
+        }
+        // Warm the in-memory clip cache on a background thread.
+        try {
+            ClipRepository.get(getApplicationContext());
+        } catch (Throwable ignored) {
+            // never block app startup
         }
     }
 }

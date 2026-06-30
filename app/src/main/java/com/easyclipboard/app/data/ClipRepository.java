@@ -2,6 +2,8 @@ package com.easyclipboard.app.data;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.preference.PreferenceManager;
 
@@ -18,40 +20,86 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
- * Single source of truth for clip history. Holds the in-memory {@link Clip}
- * list and persists it to an internal file ({@code clips.dat}) with
- * {@link ObjectOutputStream}. The {@link #addClip} logic is ported faithfully
- * from the original Native Clipboard {@code Util.addClip}.
+ * Single in-memory source of truth for clip history.
+ *
+ * PERFORMANCE: reads are served from an in-memory list — NOTHING on the hot
+ * "show the panel" path touches disk. The list is loaded from {@code clips.dat}
+ * exactly once, on a background single-thread executor (kicked off at process
+ * start by EasyClipApp). All writes serialize a snapshot to disk on that same
+ * background executor, so mutations never block the UI / accessibility main
+ * thread. Observers are notified on the main thread so a visible grid/panel
+ * refreshes when a clip is captured in the background.
+ *
+ * The {@link #addClip} logic is ported faithfully from the original
+ * Native Clipboard {@code Util.addClip}.
  */
 public class ClipRepository {
 
     private static final String FILE_NAME = "clips.dat";
-    /** Sentinel text that must never be stored (original used //NATIVECLIPBOARDCLOSE//). */
     public static final String SENTINEL = "//EASYCLIPBOARDCLOSE//";
     private static final int HISTORY_DEFAULT = 25;
     private static final int HISTORY_UNLIMITED = 999999;
 
-    private static ClipRepository INSTANCE;
+    private static volatile ClipRepository INSTANCE;
 
     private final List<Clip> clips = new ArrayList<>();
-    private boolean loaded = false;
+    private volatile boolean loaded = false;
+    private boolean loadStarted = false;
+
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final CopyOnWriteArrayList<Runnable> observers = new CopyOnWriteArrayList<>();
 
     private ClipRepository() {
     }
 
-    public static synchronized ClipRepository get(Context ctx) {
-        if (INSTANCE == null) {
-            INSTANCE = new ClipRepository();
-            INSTANCE.load(ctx.getApplicationContext());
+    public static ClipRepository get(Context ctx) {
+        ClipRepository r = INSTANCE;
+        if (r == null) {
+            synchronized (ClipRepository.class) {
+                r = INSTANCE;
+                if (r == null) {
+                    r = new ClipRepository();
+                    INSTANCE = r;
+                }
+            }
         }
-        return INSTANCE;
+        r.ensureLoaded(ctx.getApplicationContext());
+        return r;
     }
 
     public List<Clip> getClips() {
         return clips;
     }
+
+    public boolean isLoaded() {
+        return loaded;
+    }
+
+    // ---- observers (main-thread refresh callbacks) -----------------------
+
+    public void addObserver(Runnable r) {
+        if (r != null) {
+            observers.addIfAbsent(r);
+        }
+    }
+
+    public void removeObserver(Runnable r) {
+        observers.remove(r);
+    }
+
+    private void notifyObservers() {
+        for (Runnable r : observers) {
+            main.post(r);
+        }
+    }
+
+    // ---- prefs -----------------------------------------------------------
 
     private static SharedPreferences prefs(Context ctx) {
         return PreferenceManager.getDefaultSharedPreferences(ctx.getApplicationContext());
@@ -70,12 +118,13 @@ public class ClipRepository {
         }
     }
 
-    /** Convenience: add raw text (no title) captured from the system clipboard. */
-    public synchronized void addText(String text, Context ctx) {
+    // ---- mutations (in-memory; disk write is async) ----------------------
+
+    public void addText(String text, Context ctx) {
         addText(text, "", ctx);
     }
 
-    public synchronized void addText(String text, String title, Context ctx) {
+    public void addText(String text, String title, Context ctx) {
         if (text == null) {
             return;
         }
@@ -110,6 +159,7 @@ public class ClipRepository {
         }
         sort(ctx);
         save(ctx);
+        notifyObservers();
         return clips;
     }
 
@@ -120,6 +170,7 @@ public class ClipRepository {
         clips.get(index).setPinned(pinned);
         sort(ctx);
         save(ctx);
+        notifyObservers();
     }
 
     public synchronized void updateText(int index, String text, String title, Context ctx) {
@@ -129,6 +180,7 @@ public class ClipRepository {
         clips.get(index).setText(text);
         clips.get(index).setTitle(title == null ? "" : title);
         save(ctx);
+        notifyObservers();
     }
 
     public synchronized void remove(int index, Context ctx) {
@@ -137,6 +189,7 @@ public class ClipRepository {
         }
         clips.remove(index);
         save(ctx);
+        notifyObservers();
     }
 
     public synchronized void sort(Context ctx) {
@@ -150,31 +203,61 @@ public class ClipRepository {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    public synchronized void load(Context ctx) {
-        if (loaded) {
-            return;
+    // ---- disk I/O (background only) --------------------------------------
+
+    /** Kick off the one-time background load. Safe to call from any thread. */
+    public void ensureLoaded(final Context ctx) {
+        synchronized (this) {
+            if (loadStarted) {
+                return;
+            }
+            loadStarted = true;
         }
-        loaded = true;
-        File f = new File(ctx.getApplicationContext().getFilesDir(), FILE_NAME);
+        final Context app = ctx.getApplicationContext();
+        io.execute(() -> {
+            List<Clip> read = readFromDisk(app);
+            if (read != null) {
+                synchronized (ClipRepository.this) {
+                    clips.clear();
+                    clips.addAll(read);
+                }
+            }
+            loaded = true;
+            notifyObservers();
+        });
+    }
+
+    /** Schedule an async snapshot write; never blocks the calling thread. */
+    public void save(Context ctx) {
+        final ArrayList<Clip> snapshot;
+        synchronized (this) {
+            snapshot = new ArrayList<>(clips);
+        }
+        final Context app = ctx.getApplicationContext();
+        io.execute(() -> writeToDisk(app, snapshot));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Clip> readFromDisk(Context ctx) {
+        File f = new File(ctx.getFilesDir(), FILE_NAME);
         if (!f.exists()) {
-            return;
+            return null;
         }
         try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(f))) {
             Object obj = in.readObject();
             if (obj instanceof List) {
-                clips.clear();
-                clips.addAll((List<Clip>) obj);
+                return (List<Clip>) obj;
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return null;
     }
 
-    public synchronized void save(Context ctx) {
-        File f = new File(ctx.getApplicationContext().getFilesDir(), FILE_NAME);
+    private void writeToDisk(Context ctx, List<Clip> snapshot) {
+        File f = new File(ctx.getFilesDir(), FILE_NAME);
         try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(f))) {
-            out.writeObject(new ArrayList<>(clips));
+            out.writeObject(snapshot);
         } catch (Exception e) {
             e.printStackTrace();
         }

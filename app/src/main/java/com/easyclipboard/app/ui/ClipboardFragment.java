@@ -30,15 +30,25 @@ import java.util.List;
 
 /**
  * The headline page: a multi-column RecyclerView GRID of clip cards using the
- * ported {@link ClipAdapter}, the original clip-card item layout, drawables and
- * colours. Gestures: single tap = copy, double tap = show full text, long-press
- * = pin/edit/delete, swipe = delete, FAB = add.
+ * ported {@link ClipAdapter}. Reads come from {@link ClipRepository}'s in-memory
+ * cache (no main-thread disk). Gestures: single tap = copy, double tap = show
+ * full text, long-press = pin/edit/delete, swipe = delete, FAB = add.
  */
 public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemListener {
 
     private ClipRepository repo;
     private ClipAdapter adapter;
+    private GridLayoutManager layoutManager;
     private RecyclerView recycler;
+
+    private final Runnable dataObserver = new Runnable() {
+        @Override
+        public void run() {
+            if (adapter != null) {
+                adapter.notifyDataSetChanged();
+            }
+        }
+    };
 
     @Nullable
     @Override
@@ -54,7 +64,9 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
         repo = ClipRepository.get(ctx);
 
         recycler = view.findViewById(R.id.recycler);
-        recycler.setLayoutManager(new GridLayoutManager(ctx, spanCount(ctx)));
+        recycler.setHasFixedSize(true);
+        layoutManager = new GridLayoutManager(ctx, spanCount(ctx));
+        recycler.setLayoutManager(layoutManager);
         adapter = new ClipAdapter(ctx, repo.getClips(), this);
         recycler.setAdapter(adapter);
 
@@ -76,6 +88,8 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
 
         FloatingActionButton fab = view.findViewById(R.id.fab_add);
         fab.setOnClickListener(v -> showAddDialog());
+
+        repo.addObserver(dataObserver);
     }
 
     /** span = columncount pref if > 0, else auto (screen width / ~160dp, min 2). */
@@ -100,10 +114,21 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
     @Override
     public void onResume() {
         super.onResume();
-        if (recycler != null && getContext() != null) {
-            recycler.setLayoutManager(new GridLayoutManager(requireContext(), spanCount(requireContext())));
+        if (layoutManager != null && getContext() != null) {
+            layoutManager.setSpanCount(spanCount(requireContext()));
         }
-        refresh();
+        if (adapter != null) {
+            adapter.refreshSettings();
+            adapter.notifyDataSetChanged();
+        }
+    }
+
+    @Override
+    public void onDestroyView() {
+        if (repo != null) {
+            repo.removeObserver(dataObserver);
+        }
+        super.onDestroyView();
     }
 
     @Override

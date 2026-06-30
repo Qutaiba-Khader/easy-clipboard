@@ -42,14 +42,17 @@ import java.util.List;
  * text field in ANY app pops a keyboard-style clipboard panel up from the
  * bottom; tapping a clip pastes it into that field.
  *
- * Detection mirrors the original AccessService.Click(): on TYPE_VIEW_CLICKED of
- * an editable node, if the gap since the previous editable click is < 300ms it is
- * treated as a double-tap and the panel is shown. The panel is a
- * TYPE_APPLICATION_OVERLAY window (uses the "Display over other apps" permission)
- * that does NOT steal focus from the field, so ACTION_PASTE lands in it. The
- * window is laid out within the content area (no FLAG_LAYOUT_IN_SCREEN) and pads
- * itself up by the navigation-bar inset, so the system back/home/recent buttons
- * stay visible and tappable.
+ * PERFORMANCE: onAccessibilityEvent only does the cheap double-tap timing check
+ * (no disk / heavy work — it runs for every UI event system-wide). The panel
+ * view + adapter are inflated ONCE (on service connect, off the event hot path)
+ * and reused; showing the panel only rebinds the in-memory clip list + cached
+ * settings and adds the cached view to the WindowManager — no disk, no
+ * re-inflation. The clip list is served from {@link ClipRepository}'s in-memory
+ * cache (loaded on a background thread at process start).
+ *
+ * The window is laid out within the content area (no FLAG_LAYOUT_IN_SCREEN) and
+ * pads itself up by the navigation-bar inset, so the system back/home/recent
+ * buttons stay visible and tappable.
  */
 public class ClipboardAccessibilityService extends AccessibilityService
         implements ClipAdapter.OnItemListener {
@@ -70,6 +73,16 @@ public class ClipboardAccessibilityService extends AccessibilityService
     private ClipRepository repo;
     private final Handler main = new Handler(Looper.getMainLooper());
 
+    // Refreshes a visible panel when a clip is captured/changed in the background.
+    private final Runnable dataObserver = new Runnable() {
+        @Override
+        public void run() {
+            if (panelShowing && panelAdapter != null) {
+                panelAdapter.notifyDataSetChanged();
+            }
+        }
+    };
+
     public static ClipboardAccessibilityService getInstance() {
         return instance;
     }
@@ -79,7 +92,15 @@ public class ClipboardAccessibilityService extends AccessibilityService
         super.onServiceConnected();
         instance = this;
         repo = ClipRepository.get(this);
+        repo.addObserver(dataObserver);
         windowManager = (WindowManager) getSystemService(Context.WINDOW_SERVICE);
+        // Pre-inflate the panel now (off the event hot path) so the first
+        // double-tap shows instantly.
+        try {
+            ensurePanel();
+        } catch (Throwable ignored) {
+            // will retry lazily on first show
+        }
         // Enable onKeyEvent so BACK can dismiss the panel.
         try {
             AccessibilityServiceInfo info = getServiceInfo();
@@ -132,6 +153,9 @@ public class ClipboardAccessibilityService extends AccessibilityService
     @Override
     public boolean onUnbind(android.content.Intent intent) {
         dismissPanel();
+        if (repo != null) {
+            repo.removeObserver(dataObserver);
+        }
         panelView = null;
         panelAdapter = null;
         panelLayout = null;
@@ -203,9 +227,11 @@ public class ClipboardAccessibilityService extends AccessibilityService
         try {
             ensurePanel();
 
-            // Rebind current clips + span BEFORE adding the view (avoids first-frame jank).
+            // Rebind current clips + cached settings + span BEFORE adding the view
+            // (no disk, no re-inflation — avoids first-frame jank).
             panelLayout.setSpanCount(spanCount());
             panelAdapter.mClips = repo.getClips();
+            panelAdapter.refreshSettings();
             panelAdapter.notifyDataSetChanged();
 
             final int height = panelHeightPx();
@@ -320,7 +346,7 @@ public class ClipboardAccessibilityService extends AccessibilityService
             return;
         }
         final String text = clips.get(position).getText();
-        // Save to history (bumps time) and put it on the system clipboard.
+        // Save to history (bumps time, async disk) and put it on the system clipboard.
         repo.addText(text, this);
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {

@@ -25,13 +25,16 @@ import java.util.List;
  * Clip-card grid adapter. Ported from the original
  * com.dhm47.nativeclipboard.ClipAdapter: same item layout (R.layout.textview),
  * same card colouring rules and text binding, migrated android.support.v7 ->
- * androidx. Click callbacks go through an explicit {@link OnItemListener} so the
- * adapter works from Fragments, the IME and the PROCESS_TEXT activity.
+ * androidx.
  *
- * Gestures are distinguished with a {@link GestureDetector}:
- *   single tap (confirmed) -> onItemClicked, double tap -> onItemDoubleTap,
- *   long press -> onItemLongClicked. Routing single taps through
- *   onSingleTapConfirmed guarantees a double tap never also fires a single tap.
+ * PERFORMANCE: the colour / text-size / theme settings are read from
+ * SharedPreferences ONCE (constructor + {@link #refreshSettings()}) and cached in
+ * fields, instead of being read on every {@code onBindViewHolder} for every item.
+ * No reflection is performed during binding.
+ *
+ * Gestures are distinguished with a {@link GestureDetector}: single tap
+ * (confirmed) -> onItemClicked, double tap -> onItemDoubleTap, long press ->
+ * onItemLongClicked.
  */
 public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder> {
 
@@ -43,11 +46,17 @@ public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder
         boolean onItemLongClicked(int position);
     }
 
-    private static SharedPreferences setting;
     private final boolean keyboard;
     public List<Clip> mClips;
     private final Context mContext;
     private final OnItemListener listener;
+
+    // Cached settings (read once, refreshed on demand) — not per-bind.
+    private int clpColor;
+    private int pinColor;
+    private int txtColor;
+    private int txtSize;
+    private String keyboardTheme;
 
     public ClipAdapter(Context ctx, List<Clip> mClips, OnItemListener listener) {
         this(ctx, mClips, listener, false);
@@ -58,7 +67,18 @@ public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder
         this.mClips = mClips != null ? mClips : new ArrayList<Clip>();
         this.listener = listener;
         this.keyboard = keyboard;
-        setting = PreferenceManager.getDefaultSharedPreferences(ctx.getApplicationContext());
+        refreshSettings();
+    }
+
+    /** Re-read the cached display settings (call when prefs may have changed). */
+    public void refreshSettings() {
+        SharedPreferences s = PreferenceManager
+                .getDefaultSharedPreferences(mContext.getApplicationContext());
+        clpColor = s.getInt("clpcolor", -17630);
+        pinColor = s.getInt("pincolor", -3190016);
+        txtColor = s.getInt("txtcolor", -10073330);
+        txtSize = s.getInt("txtsize", 20);
+        keyboardTheme = s.getString("keyboard_theme", "same");
     }
 
     @Override
@@ -81,25 +101,22 @@ public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder
         if (i < 0 || i >= mClips.size()) {
             return;
         }
-        if (this.mClips.get(i).getTitle().equals("")) {
-            holder.clipText.setText(this.mClips.get(i).getText());
+        final Clip clip = mClips.get(i);
+        if (clip.getTitle().equals("")) {
+            holder.clipText.setText(clip.getText());
             holder.clipText.setLines(3);
             holder.clipTitleText.setVisibility(View.GONE);
         } else {
-            holder.clipText.setText(this.mClips.get(i).getText());
+            holder.clipText.setText(clip.getText());
             holder.clipText.setLines(2);
-            holder.clipTitleText.setText(this.mClips.get(i).getTitle());
+            holder.clipTitleText.setText(clip.getTitle());
             holder.clipTitleText.setVisibility(View.VISIBLE);
         }
 
         if (this.keyboard) {
-            switch (setting.getString("keyboard_theme", "same")) {
+            switch (keyboardTheme) {
                 case "dark":
-                    if (this.mClips.get(i).isPinned()) {
-                        holder.cv.setCardBackgroundColor(-13550526);
-                    } else {
-                        holder.cv.setCardBackgroundColor(-12563632);
-                    }
+                    holder.cv.setCardBackgroundColor(clip.isPinned() ? -13550526 : -12563632);
                     holder.clipTitleText.setTextColor(-1);
                     holder.clipText.setTextColor(-1);
                     break;
@@ -107,27 +124,19 @@ public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder
                     break;
                 case "same":
                 default:
-                    if (this.mClips.get(i).isPinned()) {
-                        holder.cv.setCardBackgroundColor(setting.getInt("pincolor", -3190016));
-                    } else {
-                        holder.cv.setCardBackgroundColor(setting.getInt("clpcolor", -17630));
-                    }
+                    holder.cv.setCardBackgroundColor(clip.isPinned() ? pinColor : clpColor);
                     holder.clipTitleText.setTextColor(-1);
                     holder.clipText.setTextColor(-1);
                     break;
             }
         } else {
-            if (this.mClips.get(i).isPinned()) {
-                holder.cv.setCardBackgroundColor(setting.getInt("pincolor", -3190016));
-            } else {
-                holder.cv.setCardBackgroundColor(setting.getInt("clpcolor", -17630));
-            }
-            holder.clipTitleText.setTextColor(setting.getInt("txtcolor", -10073330));
-            holder.clipText.setTextColor(setting.getInt("txtcolor", -10073330));
+            holder.cv.setCardBackgroundColor(clip.isPinned() ? pinColor : clpColor);
+            holder.clipTitleText.setTextColor(txtColor);
+            holder.clipText.setTextColor(txtColor);
         }
 
-        holder.clipText.setTextSize(setting.getInt("txtsize", 20));
-        holder.clipTitleText.setTextSize(1.2f * setting.getInt("txtsize", 20));
+        holder.clipText.setTextSize(txtSize);
+        holder.clipTitleText.setTextSize(1.2f * txtSize);
 
         final GestureDetector detector = new GestureDetector(mContext,
                 new GestureDetector.SimpleOnGestureListener() {
