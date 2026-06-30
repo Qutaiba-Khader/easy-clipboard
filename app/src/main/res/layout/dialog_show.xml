@@ -12,15 +12,18 @@
         android:orientation="horizontal">
 
         <TextView
+            android:id="@+id/show_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:padding="8dp"
-            android:text="@string/pick_clip"
-            android:textStyle="bold" />
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="@string/show_clip"
+            android:textStyle="bold"
+            android:textSize="18sp" />
 
         <ImageButton
-            android:id="@+id/popup_close"
+            android:id="@+id/show_close"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="?attr/selectableItemBackgroundBorderless"
@@ -29,11 +32,18 @@
             android:src="@drawable/ic_close" />
     </LinearLayout>
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recycler"
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:maxHeight="420dp"
-        android:clipToPadding="false"
-        android:padding="4dp" />
+        android:scrollbars="vertical">
+
+        <TextView
+            android:id="@+id/show_text"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="12dp"
+            android:textIsSelectable="true"
+            android:textSize="16sp" />
+    </ScrollView>
 </LinearLayout>

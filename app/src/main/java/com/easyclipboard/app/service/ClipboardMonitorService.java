@@ -12,20 +12,23 @@ import android.os.IBinder;
 
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
+import androidx.core.content.ContextCompat;
 
 import com.easyclipboard.app.R;
 import com.easyclipboard.app.data.ClipRepository;
 
 /**
  * Foreground service that listens for primary-clip changes and feeds them into
- * {@link ClipRepository}. This is the no-root capture path: it works while the
- * service is alive (app foreground / IME up), within the OS background-clipboard
- * access limits. START_STICKY so the OS restarts it.
+ * {@link ClipRepository}. No-root capture path: works while the service is alive
+ * (app foreground / IME up), within OS background-clipboard limits. START_STICKY.
  */
 public class ClipboardMonitorService extends Service {
 
     private static final String CHANNEL_ID = "clipboard_monitor";
     private static final int NOTIFICATION_ID = 1001;
+
+    /** Simple flag the Setup screen reads to show running/stopped. */
+    public static volatile boolean isRunning = false;
 
     private ClipboardManager clipboardManager;
     private ClipRepository repo;
@@ -38,9 +41,19 @@ public class ClipboardMonitorService extends Service {
                 }
             };
 
+    public static void start(Context ctx) {
+        ContextCompat.startForegroundService(ctx,
+                new Intent(ctx, ClipboardMonitorService.class));
+    }
+
+    public static void stop(Context ctx) {
+        ctx.stopService(new Intent(ctx, ClipboardMonitorService.class));
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
+        isRunning = true;
         repo = ClipRepository.get(this);
         clipboardManager = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (clipboardManager != null) {
@@ -89,6 +102,7 @@ public class ClipboardMonitorService extends Service {
 
     @Override
     public void onDestroy() {
+        isRunning = false;
         if (clipboardManager != null) {
             clipboardManager.removePrimaryClipChangedListener(listener);
         }

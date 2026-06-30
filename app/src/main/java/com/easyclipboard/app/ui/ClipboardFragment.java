@@ -5,6 +5,7 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.os.Bundle;
 import android.text.InputType;
+import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -28,9 +29,10 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.List;
 
 /**
- * The headline page: a RecyclerView grid of clip cards using the ported
- * {@link ClipAdapter}, the original clip-card item layout, drawables and
- * colours. Tap = copy, long-press = pin/edit/delete, swipe = delete, FAB = add.
+ * The headline page: a multi-column RecyclerView GRID of clip cards using the
+ * ported {@link ClipAdapter}, the original clip-card item layout, drawables and
+ * colours. Gestures: single tap = copy, double tap = show full text, long-press
+ * = pin/edit/delete, swipe = delete, FAB = add.
  */
 public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemListener {
 
@@ -52,8 +54,7 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
         repo = ClipRepository.get(ctx);
 
         recycler = view.findViewById(R.id.recycler);
-        int columns = spanCount(ctx);
-        recycler.setLayoutManager(new GridLayoutManager(ctx, columns));
+        recycler.setLayoutManager(new GridLayoutManager(ctx, spanCount(ctx)));
         adapter = new ClipAdapter(ctx, repo.getClips(), this);
         recycler.setAdapter(adapter);
 
@@ -77,10 +78,17 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
         fab.setOnClickListener(v -> showAddDialog());
     }
 
+    /** span = columncount pref if > 0, else auto (screen width / ~160dp, min 2). */
     private int spanCount(Context ctx) {
         int columns = PreferenceManager.getDefaultSharedPreferences(ctx)
                 .getInt("columncount", 0);
-        return columns <= 0 ? 2 : columns;
+        if (columns > 0) {
+            return columns;
+        }
+        DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        int dpWidth = (int) (dm.widthPixels / dm.density);
+        int auto = dpWidth / 160;
+        return Math.max(2, auto);
     }
 
     private void refresh() {
@@ -92,6 +100,9 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
     @Override
     public void onResume() {
         super.onResume();
+        if (recycler != null && getContext() != null) {
+            recycler.setLayoutManager(new GridLayoutManager(requireContext(), spanCount(requireContext())));
+        }
         refresh();
     }
 
@@ -103,6 +114,15 @@ public class ClipboardFragment extends Fragment implements ClipAdapter.OnItemLis
         }
         copyToSystem(clips.get(position).getText());
         Toast.makeText(requireContext(), R.string.copied, Toast.LENGTH_SHORT).show();
+    }
+
+    @Override
+    public void onItemDoubleTap(int position) {
+        List<Clip> clips = repo.getClips();
+        if (position < 0 || position >= clips.size()) {
+            return;
+        }
+        ShowClipDialog.show(requireContext(), clips.get(position));
     }
 
     @Override

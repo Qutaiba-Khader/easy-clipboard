@@ -1,8 +1,11 @@
 package com.easyclipboard.app.ui;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.view.GestureDetector;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -22,14 +25,20 @@ import java.util.List;
  * Clip-card grid adapter. Ported from the original
  * com.dhm47.nativeclipboard.ClipAdapter: same item layout (R.layout.textview),
  * same card colouring rules and text binding, migrated android.support.v7 ->
- * androidx. The only behavioural change is that click callbacks go through an
- * explicit {@link OnItemListener} instead of casting the Context, so the adapter
- * works from Fragments, the IME and the PROCESS_TEXT activity.
+ * androidx. Click callbacks go through an explicit {@link OnItemListener} so the
+ * adapter works from Fragments, the IME and the PROCESS_TEXT activity.
+ *
+ * Gestures are distinguished with a {@link GestureDetector}:
+ *   single tap (confirmed) -> onItemClicked, double tap -> onItemDoubleTap,
+ *   long press -> onItemLongClicked. Routing single taps through
+ *   onSingleTapConfirmed guarantees a double tap never also fires a single tap.
  */
 public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder> {
 
     public interface OnItemListener {
         void onItemClicked(int position);
+
+        void onItemDoubleTap(int position);
 
         boolean onItemLongClicked(int position);
     }
@@ -65,6 +74,7 @@ public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder
         return new ClipViewHolder(v);
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     @Override
     public void onBindViewHolder(@NonNull final ClipViewHolder holder, int in) {
         int i = holder.getAdapterPosition();
@@ -119,18 +129,41 @@ public class ClipAdapter extends RecyclerView.Adapter<ClipAdapter.ClipViewHolder
         holder.clipText.setTextSize(setting.getInt("txtsize", 20));
         holder.clipTitleText.setTextSize(1.2f * setting.getInt("txtsize", 20));
 
-        holder.cv.setOnClickListener(new View.OnClickListener() {
+        final GestureDetector detector = new GestureDetector(mContext,
+                new GestureDetector.SimpleOnGestureListener() {
+                    @Override
+                    public boolean onSingleTapConfirmed(MotionEvent e) {
+                        if (listener != null) {
+                            listener.onItemClicked(holder.getAdapterPosition());
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public boolean onDoubleTap(MotionEvent e) {
+                        if (listener != null) {
+                            listener.onItemDoubleTap(holder.getAdapterPosition());
+                        }
+                        return true;
+                    }
+
+                    @Override
+                    public void onLongPress(MotionEvent e) {
+                        if (listener != null) {
+                            listener.onItemLongClicked(holder.getAdapterPosition());
+                        }
+                    }
+
+                    @Override
+                    public boolean onDown(MotionEvent e) {
+                        return true;
+                    }
+                });
+
+        holder.cv.setOnTouchListener(new View.OnTouchListener() {
             @Override
-            public void onClick(View v) {
-                if (listener != null) {
-                    listener.onItemClicked(holder.getAdapterPosition());
-                }
-            }
-        });
-        holder.cv.setOnLongClickListener(new View.OnLongClickListener() {
-            @Override
-            public boolean onLongClick(View v) {
-                return listener != null && listener.onItemLongClicked(holder.getAdapterPosition());
+            public boolean onTouch(View v, MotionEvent event) {
+                return detector.onTouchEvent(event);
             }
         });
     }

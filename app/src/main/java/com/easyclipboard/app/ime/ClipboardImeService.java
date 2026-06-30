@@ -59,8 +59,7 @@ public class ClipboardImeService extends InputMethodService implements ClipAdapt
         }
     }
 
-    @Override
-    public void onItemClicked(int position) {
+    private void commit(int position) {
         List<Clip> clips = repo.getClips();
         if (position < 0 || position >= clips.size()) {
             return;
@@ -69,6 +68,17 @@ public class ClipboardImeService extends InputMethodService implements ClipAdapt
         if (ic != null) {
             ic.commitText(clips.get(position).getText(), 1);
         }
+    }
+
+    @Override
+    public void onItemClicked(int position) {
+        commit(position);
+    }
+
+    @Override
+    public void onItemDoubleTap(int position) {
+        // In the keyboard tray a double tap simply commits the clip as well.
+        commit(position);
     }
 
     @Override

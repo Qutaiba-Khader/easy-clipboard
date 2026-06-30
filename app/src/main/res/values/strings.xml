@@ -5,6 +5,7 @@
     <string name="accessibility_label">Easy Clipboard Paste Helper</string>
 
     <!-- Tabs -->
+    <string name="tab_setup">Setup</string>
     <string name="tab_clipboard">Clipboard</string>
     <string name="tab_settings">Settings</string>
     <string name="tab_about">About</string>
@@ -18,6 +19,8 @@
     <string name="delete">Delete</string>
     <string name="add_clip">Add clip</string>
     <string name="pick_clip">Pick a clip to paste</string>
+    <string name="show_clip">Clip</string>
+    <string name="close">Close</string>
 
     <!-- Monitor service -->
     <string name="monitor_channel">Clipboard monitor</string>
@@ -50,4 +53,31 @@
     <string name="sort_newfirst">Newest first</string>
     <string name="sort_pinnedfirst">Pinned first</string>
     <string name="sort_pinnedlast">Pinned last</string>
+
+    <!-- Setup / status screen -->
+    <string name="setup_header">Set up Easy Clipboard. Enable what you need:</string>
+    <string name="setup_status_ok">✓ Enabled</string>
+    <string name="setup_status_bad">✗ Not enabled</string>
+    <string name="setup_status_optional">Optional</string>
+    <string name="setup_grant">Grant</string>
+    <string name="setup_enable">Enable</string>
+    <string name="setup_switch">Switch</string>
+    <string name="setup_start">Start</string>
+    <string name="setup_stop">Stop</string>
+    <string name="setup_request">Request</string>
+    <string name="setup_info">Info</string>
+
+    <string name="setup_notif_title">Notifications</string>
+    <string name="setup_notif_sub">Lets the background monitor run as a foreground service.</string>
+    <string name="setup_ime_title">Clipboard keyboard</string>
+    <string name="setup_ime_sub">Enable and switch to the Easy Clipboard tray keyboard.</string>
+    <string name="setup_acc_title">Accessibility service</string>
+    <string name="setup_acc_sub">Allows pasting into the focused field in other apps.</string>
+    <string name="setup_overlay_title">Display over other apps</string>
+    <string name="setup_overlay_sub">Needed to show the clip popup over other apps.</string>
+    <string name="setup_monitor_title">Clipboard monitor service</string>
+    <string name="setup_monitor_sub">Captures copied text while running.</string>
+    <string name="setup_shizuku_title">Shizuku</string>
+    <string name="setup_shizuku_sub">Optional privileged backend for global background capture.</string>
+    <string name="setup_shizuku_optional">Shizuku is optional. Install and start the Shizuku app to enable privileged background capture.</string>
 </resources>
